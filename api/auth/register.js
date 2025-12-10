@@ -33,8 +33,32 @@ export default async function handler(req, res) {
             return res.status(400).json({ message: 'User with this email already exists' });
         }
 
+        // Debug: Log Cloudinary env vars (partial)
+        console.log('Cloudinary config check:', {
+            hasCloudName: !!process.env.CLOUDINARY_CLOUD_NAME,
+            hasApiKey: !!process.env.CLOUDINARY_API_KEY,
+            hasApiSecret: !!process.env.CLOUDINARY_API_SECRET,
+            signatureLength: signature ? signature.length : 0
+        });
+
         // Upload signature to Cloudinary
-        const { url: signatureUrl, publicId: signaturePublicId } = await uploadImage(signature);
+        let signatureUrl, signaturePublicId;
+        try {
+            const uploadResult = await uploadImage(signature);
+            signatureUrl = uploadResult.url;
+            signaturePublicId = uploadResult.publicId;
+            console.log('Cloudinary upload success:', signatureUrl);
+        } catch (uploadError) {
+            console.error('Cloudinary upload failed:', uploadError);
+            return res.status(500).json({
+                message: 'Failed to upload signature. Please try again.',
+                error: uploadError.message
+            });
+        }
+
+        if (!signatureUrl) {
+            return res.status(500).json({ message: 'Signature upload failed - no URL returned' });
+        }
 
         // Hash password and create user
         const hashedPassword = await hashPassword(password);
