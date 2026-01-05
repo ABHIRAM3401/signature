@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Client } from '@gradio/client';
 import ThemeToggle from '../components/ThemeToggle';
 import './LoginPage.css';
 
@@ -13,6 +14,8 @@ function LoginPage() {
     });
     const [signatureFile, setSignatureFile] = useState(null);
     const [signaturePreview, setSignaturePreview] = useState(null);
+    const [signatureFile2, setSignatureFile2] = useState(null);
+    const [signaturePreview2, setSignaturePreview2] = useState(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
@@ -25,7 +28,7 @@ function LoginPage() {
         setError('');
     };
 
-    const handleSignatureChange = (e) => {
+    const handleSignatureChange = (e, isSecond = false) => {
         const file = e.target.files[0];
         if (file) {
             if (!file.type.startsWith('image/')) {
@@ -36,13 +39,22 @@ function LoginPage() {
                 setError('Image must be less than 5MB');
                 return;
             }
-            setSignatureFile(file);
+
+            if (isSecond) {
+                setSignatureFile2(file);
+            } else {
+                setSignatureFile(file);
+            }
             setError('');
 
             // Create preview
             const reader = new FileReader();
             reader.onloadend = () => {
-                setSignaturePreview(reader.result);
+                if (isSecond) {
+                    setSignaturePreview2(reader.result);
+                } else {
+                    setSignaturePreview(reader.result);
+                }
             };
             reader.readAsDataURL(file);
         }
@@ -72,12 +84,34 @@ function LoginPage() {
                 localStorage.setItem('signatureguard-user', JSON.stringify(data.user));
                 navigate('/dashboard');
             } else {
-                // Registration flow with signature
-                if (!signatureFile) {
-                    throw new Error('Please upload your signature');
+                // Registration flow with two signatures
+                if (!signatureFile || !signatureFile2) {
+                    throw new Error('Please upload both signature samples');
                 }
 
-                // Convert signature to base64
+                // Calculate threshold using HF model
+                setError(''); // Clear any previous errors
+                console.log('🔄 Calculating personalized threshold...');
+
+                // Connect to HF and get similarity score
+                const client = await Client.connect("sunny4203/signature-verification");
+                const result = await client.predict("/compute_similarity", {
+                    image1: signatureFile,
+                    image2: signatureFile2
+                });
+
+                // Parse the similarity score
+                const resultText = result.data[0];
+                const scoreMatch = resultText.match(/Similarity Score:\s*([\d.]+)/);
+                if (!scoreMatch) {
+                    throw new Error('Could not calculate threshold. Please try again.');
+                }
+
+                const similarityScore = parseFloat(scoreMatch[1]);
+                const threshold = similarityScore - 0.03;
+                console.log(`✅ Similarity: ${similarityScore}, Threshold: ${threshold}`);
+
+                // Convert first signature to base64 for storage
                 const reader = new FileReader();
                 reader.readAsDataURL(signatureFile);
 
@@ -88,7 +122,8 @@ function LoginPage() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 ...formData,
-                                signature: reader.result
+                                signature: reader.result,
+                                threshold: threshold
                             })
                         });
 
@@ -107,6 +142,7 @@ function LoginPage() {
             }
         } catch (err) {
             setError(err.message);
+            setLoading(false);
         } finally {
             if (isLogin) setLoading(false);
         }
@@ -118,11 +154,18 @@ function LoginPage() {
         setFormData({ name: '', email: '', password: '' });
         setSignatureFile(null);
         setSignaturePreview(null);
+        setSignatureFile2(null);
+        setSignaturePreview2(null);
     };
 
-    const removeSignature = () => {
-        setSignatureFile(null);
-        setSignaturePreview(null);
+    const removeSignature = (isSecond = false) => {
+        if (isSecond) {
+            setSignatureFile2(null);
+            setSignaturePreview2(null);
+        } else {
+            setSignatureFile(null);
+            setSignaturePreview(null);
+        }
     };
 
     return (
@@ -204,42 +247,79 @@ function LoginPage() {
                             </div>
                         </div>
 
-                        {/* Signature Upload - Only for Registration */}
+                        {/* Signature Uploads - Only for Registration */}
                         {!isLogin && (
-                            <div className="input-group">
-                                <label>Your Signature</label>
-                                <p className="input-hint">Upload a clear image of your signature for verification</p>
+                            <>
+                                {/* First Signature */}
+                                <div className="input-group">
+                                    <label>Signature Sample 1</label>
+                                    <p className="input-hint">This will be your reference signature</p>
 
-                                {signaturePreview ? (
-                                    <div className="signature-preview">
-                                        <img src={signaturePreview} alt="Signature preview" />
-                                        <button
-                                            type="button"
-                                            className="remove-signature"
-                                            onClick={removeSignature}
-                                            aria-label="Remove signature"
-                                        >
-                                            ✕
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="signature-upload">
-                                        <input
-                                            type="file"
-                                            id="signature"
-                                            accept="image/*"
-                                            onChange={handleSignatureChange}
-                                            className="file-input"
-                                            required={!isLogin}
-                                        />
-                                        <label htmlFor="signature" className="file-label">
-                                            <span className="upload-icon">📝</span>
-                                            <span>Click to upload signature</span>
-                                            <span className="file-hint">PNG, JPG up to 5MB</span>
-                                        </label>
-                                    </div>
-                                )}
-                            </div>
+                                    {signaturePreview ? (
+                                        <div className="signature-preview">
+                                            <img src={signaturePreview} alt="Signature 1 preview" />
+                                            <button
+                                                type="button"
+                                                className="remove-signature"
+                                                onClick={() => removeSignature(false)}
+                                                aria-label="Remove signature 1"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="signature-upload">
+                                            <input
+                                                type="file"
+                                                id="signature1"
+                                                accept="image/*"
+                                                onChange={(e) => handleSignatureChange(e, false)}
+                                                className="file-input"
+                                            />
+                                            <label htmlFor="signature1" className="file-label">
+                                                <span className="upload-icon">📝</span>
+                                                <span>Upload Signature 1</span>
+                                                <span className="file-hint">PNG, JPG up to 5MB</span>
+                                            </label>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Second Signature */}
+                                <div className="input-group">
+                                    <label>Signature Sample 2</label>
+                                    <p className="input-hint">Used to calibrate your personal threshold</p>
+
+                                    {signaturePreview2 ? (
+                                        <div className="signature-preview">
+                                            <img src={signaturePreview2} alt="Signature 2 preview" />
+                                            <button
+                                                type="button"
+                                                className="remove-signature"
+                                                onClick={() => removeSignature(true)}
+                                                aria-label="Remove signature 2"
+                                            >
+                                                ✕
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="signature-upload">
+                                            <input
+                                                type="file"
+                                                id="signature2"
+                                                accept="image/*"
+                                                onChange={(e) => handleSignatureChange(e, true)}
+                                                className="file-input"
+                                            />
+                                            <label htmlFor="signature2" className="file-label">
+                                                <span className="upload-icon">📝</span>
+                                                <span>Upload Signature 2</span>
+                                                <span className="file-hint">PNG, JPG up to 5MB</span>
+                                            </label>
+                                        </div>
+                                    )}
+                                </div>
+                            </>
                         )}
 
                         <button

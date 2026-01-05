@@ -63,6 +63,10 @@ const userSchema = new mongoose.Schema({
     signaturePublicId: {
         type: String
     },
+    threshold: {
+        type: Number,
+        required: true
+    },
     createdAt: {
         type: Date,
         default: Date.now
@@ -106,7 +110,7 @@ async function uploadToCloudinary(base64Image) {
 // Routes
 app.post('/api/auth/register', async (req, res) => {
     try {
-        const { name, email, password, signature } = req.body;
+        const { name, email, password, signature, threshold } = req.body;
 
         if (!name || !email || !password) {
             return res.status(400).json({ message: 'Please provide all required fields' });
@@ -114,6 +118,10 @@ app.post('/api/auth/register', async (req, res) => {
 
         if (!signature) {
             return res.status(400).json({ message: 'Please upload your signature' });
+        }
+
+        if (threshold === undefined || threshold === null) {
+            return res.status(400).json({ message: 'Threshold calculation required' });
         }
 
         if (password.length < 6) {
@@ -136,7 +144,8 @@ app.post('/api/auth/register', async (req, res) => {
             email: email.toLowerCase(),
             password: hashedPassword,
             signatureUrl,
-            signaturePublicId
+            signaturePublicId,
+            threshold
         });
 
         const token = generateToken(user._id);
@@ -148,7 +157,8 @@ app.post('/api/auth/register', async (req, res) => {
                 id: user._id,
                 name: user.name,
                 email: user.email,
-                signatureUrl: user.signatureUrl
+                signatureUrl: user.signatureUrl,
+                threshold: user.threshold
             }
         });
     } catch (error) {
@@ -184,7 +194,8 @@ app.post('/api/auth/login', async (req, res) => {
                 id: user._id,
                 name: user.name,
                 email: user.email,
-                signatureUrl: user.signatureUrl
+                signatureUrl: user.signatureUrl,
+                threshold: user.threshold
             }
         });
     } catch (error) {

@@ -119,21 +119,25 @@ function Dashboard() {
 
         const score = parseFloat(scoreMatch[1]);
 
-        // Determine match based on threshold (defaulting to 0.7 for stricter matching, or 0.5)
-        // Using 0.5 as base threshold
-        const isMatch = score > 0.5;
+        // Use personalized threshold from user data (fallback to 0.5 for legacy users)
+        const userThreshold = user.threshold !== undefined ? user.threshold : 0.5;
+        const isMatch = score > userThreshold;
 
-        // Determine confidence
+        // Determine confidence based on how far the score is from threshold
         let confidence = 'Low';
-        if (score > 0.8 || score < 0.2) {
+        const diff = Math.abs(score - userThreshold);
+        if (diff > 0.2) {
             confidence = 'High';
-        } else if ((score > 0.6) || (score < 0.4)) {
+        } else if (diff > 0.1) {
             confidence = 'Medium';
         }
+
+        console.log(`🔍 Score: ${score}, Threshold: ${userThreshold}, Match: ${isMatch}`);
 
         setVerificationResult({
             match: isMatch,
             score: score,
+            threshold: userThreshold,
             confidence: confidence,
             message: isMatch ? 'Signatures are from the same person!' : 'Signatures are from different persons!'
         });
@@ -278,6 +282,7 @@ function Dashboard() {
                             <div className="result-content">
                                 <h4>{verificationResult.match ? 'Signatures Match!' : 'Signatures Do Not Match'}</h4>
                                 <p className="score">Similarity Score: {verificationResult.score.toFixed(4)}</p>
+                                <p className="threshold">Your Threshold: {verificationResult.threshold?.toFixed(4) || '0.5000'}</p>
                                 <p className="confidence">Confidence: {verificationResult.confidence || 'Medium'}</p>
                                 <p className="result-message">{verificationResult.message}</p>
                             </div>
