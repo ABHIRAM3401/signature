@@ -5,122 +5,111 @@ import torch.nn.functional as F
 from torchvision import models, transforms
 from PIL import Image
 import gradio as gr
+import numpy as np
 
+# --------------------------------------------------
 # Configuration
-IMAGE_SIZE = (155, 220)
-EMBEDDING_DIM = 512
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# --------------------------------------------------
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+MODEL_PATH = "final_signature_verification_model.pth"  # put this in repo root
 
+IMAGE_SIZE = (224, 224)
 
+# --------------------------------------------------
+# Model definition (SAME as training)
+# --------------------------------------------------
 class SiameseNetwork(nn.Module):
-    def __init__(self, embedding_dim=512):
-        super(SiameseNetwork, self).__init__()
+    def __init__(self, embedding_dim=128):
+        super().__init__()
 
-        self.backbone = models.mobilenet_v2(weights=None)
+        backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
 
-        self.backbone.features[0][0] = nn.Conv2d(
-            1, 32, kernel_size=3, stride=2, padding=1, bias=False
-        )
-        self.backbone.classifier = nn.Identity()
-
-        self.embedding = nn.Sequential(
-            nn.Linear(1280, 1024),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
-            nn.Linear(1024, embedding_dim),
-            nn.ReLU(inplace=True)
+        self.feature_extractor = nn.Sequential(
+            *list(backbone.children())[:-1]
         )
 
-        self.classifier = nn.Sequential(
-            nn.Linear(embedding_dim, 256),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.3),
-            nn.Linear(256, 1),
-            nn.Sigmoid()
-        )
+        self.embedding = nn.Linear(512, embedding_dim)
 
-    def forward_one(self, x):
-        features = self.backbone(x)
-        if len(features.shape) > 2:
-            features = F.adaptive_avg_pool2d(features, 1)
-            features = features.view(features.size(0), -1)
-        return self.embedding(features)
+    def forward_once(self, x):
+        feat = self.feature_extractor(x)
+        feat = feat.view(feat.size(0), -1)
+        emb = self.embedding(feat)
+        emb = F.normalize(emb, p=2, dim=1)
+        return emb
 
-    def forward(self, img1, img2):
-        emb1 = self.forward_one(img1)
-        emb2 = self.forward_one(img2)
-        diff = torch.abs(emb1 - emb2)
-        return self.classifier(diff).squeeze()
+    def forward(self, x1, x2):
+        return self.forward_once(x1), self.forward_once(x2)
 
 
-# Load model
-print("Loading model...")
-model = SiameseNetwork(EMBEDDING_DIM)
-model_path = "best_model.pth"
+# --------------------------------------------------
+# Load trained model
+# --------------------------------------------------
+print("🔄 Loading model...")
 
-if os.path.exists(model_path):
-    checkpoint = torch.load(model_path, map_location=DEVICE)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    print("Model loaded!")
-else:
-    print("⚠️ WARNING: model not found, random weights used")
+if not os.path.exists(MODEL_PATH):
+    raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
 
+checkpoint = torch.load(
+    MODEL_PATH,
+    map_location=DEVICE,
+    weights_only=False
+)
+
+model = SiameseNetwork(embedding_dim=checkpoint["embedding_dim"])
+model.load_state_dict(checkpoint["model_state_dict"])
 model.to(DEVICE)
 model.eval()
 
+print("✅ Model loaded successfully")
+
+# --------------------------------------------------
+# Image preprocessing (MUST match training)
+# --------------------------------------------------
 transform = transforms.Compose([
     transforms.Resize(IMAGE_SIZE),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5], std=[0.5])
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225]
+    )
 ])
 
 
-def verify_signatures(original_image, test_image):
-    if original_image is None or test_image is None:
-        return "❌ Please upload both images!"
+# --------------------------------------------------
+# Inference function (returns similarity score only)
+# --------------------------------------------------
+def compute_similarity(image1, image2):
+    if image1 is None or image2 is None:
+        return "❌ Please upload both images."
 
     try:
-        img1 = original_image.convert('L')
-        img2 = test_image.convert('L')
-
-        img1_tensor = transform(img1).unsqueeze(0).to(DEVICE)
-        img2_tensor = transform(img2).unsqueeze(0).to(DEVICE)
+        img1 = transform(image1.convert("RGB")).unsqueeze(0).to(DEVICE)
+        img2 = transform(image2.convert("RGB")).unsqueeze(0).to(DEVICE)
 
         with torch.no_grad():
-            score = model(img1_tensor, img2_tensor).item()
+            emb1, emb2 = model(img1, img2)
+            distance = torch.nn.functional.pairwise_distance(emb1, emb2).item()
+            similarity = float(np.exp(-distance))
 
-        is_match = score > 0.5
-
-        if score > 0.8 or score < 0.2:
-            confidence = "High"
-        elif 0.6 < score < 0.8 or 0.2 < score < 0.4:
-            confidence = "Medium"
-        else:
-            confidence = "Low"
-
-        if is_match:
-            result = f"✅ MATCH!\n\nSame person\n\n"
-        else:
-            result = f"❌ NO MATCH!\n\nDifferent persons\n\n"
-
-        result += f"Similarity Score: {score:.2%}\n"
-        result += f"Confidence: {confidence}"
-        return result
+        return f"🔍 Similarity Score: {similarity:.4f}"
 
     except Exception as e:
         return f"❌ Error: {str(e)}"
 
 
+# --------------------------------------------------
+# Gradio UI
+# --------------------------------------------------
 demo = gr.Interface(
-    fn=verify_signatures,
+    fn=compute_similarity,
     inputs=[
-        gr.Image(type="pil", label="Original Signature"),
-        gr.Image(type="pil", label="Test Signature")
+        gr.Image(type="pil", label="Signature Image 1"),
+        gr.Image(type="pil", label="Signature Image 2")
     ],
-    outputs=gr.Textbox(label="Result", lines=6),
-    title="🛡️ SignatureGuard"
+    outputs=gr.Textbox(label="Result"),
+    title="✍️ Signature Similarity Checker",
+    description="Upload two signature images to get a similarity score (0–1)."
 )
-
 
 if __name__ == "__main__":
     demo.launch()

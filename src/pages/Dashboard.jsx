@@ -78,9 +78,9 @@ function Dashboard() {
             const client = await Client.connect("sunny4203/signature-verification");
 
             // Call the predict function with both images
-            const result = await client.predict("/verify_signatures", {
-                original_image: originalBlob,
-                test_image: comparisonImage
+            const result = await client.predict("/compute_similarity", {
+                image1: originalBlob,
+                image2: comparisonImage
             });
 
             // Parse the result
@@ -96,16 +96,27 @@ function Dashboard() {
     };
 
     const processResult = (verificationText) => {
-        // Extract match status and score from result text
-        const isMatch = verificationText.includes('MATCH!') && !verificationText.includes('NO MATCH');
+        // Parse the new output format: "🔍 Similarity Score: 0.xxxx"
+        const scoreMatch = verificationText.match(/Similarity Score:\s*([\d.]+)/);
 
-        // Extract score using regex
-        const scoreMatch = verificationText.match(/Similarity Score:\s*([\d.]+)%/);
-        const score = scoreMatch ? parseFloat(scoreMatch[1]) / 100 : 0.5;
+        if (!scoreMatch) {
+            setError('Could not parse verification result');
+            return;
+        }
 
-        // Extract confidence
-        const confidenceMatch = verificationText.match(/Confidence:\s*(\w+)/);
-        const confidence = confidenceMatch ? confidenceMatch[1] : 'Medium';
+        const score = parseFloat(scoreMatch[1]);
+
+        // Determine match based on threshold (defaulting to 0.7 for stricter matching, or 0.5)
+        // Using 0.5 as base threshold
+        const isMatch = score > 0.5;
+
+        // Determine confidence
+        let confidence = 'Low';
+        if (score > 0.8 || score < 0.2) {
+            confidence = 'High';
+        } else if ((score > 0.6) || (score < 0.4)) {
+            confidence = 'Medium';
+        }
 
         setVerificationResult({
             match: isMatch,
@@ -253,7 +264,7 @@ function Dashboard() {
                             </div>
                             <div className="result-content">
                                 <h4>{verificationResult.match ? 'Signatures Match!' : 'Signatures Do Not Match'}</h4>
-                                <p className="score">Similarity Score: {(verificationResult.score * 100).toFixed(1)}%</p>
+                                <p className="score">Similarity Score: {verificationResult.score.toFixed(4)}</p>
                                 <p className="confidence">Confidence: {verificationResult.confidence || 'Medium'}</p>
                                 <p className="result-message">{verificationResult.message}</p>
                             </div>
