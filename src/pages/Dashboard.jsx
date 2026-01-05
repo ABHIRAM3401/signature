@@ -71,32 +71,19 @@ function Dashboard() {
 
         try {
             // Fetch the original signature image from Cloudinary
-            console.log('🔍 DEBUG: Fetching from Cloudinary URL:', user.signatureUrl);
             const originalResponse = await fetch(user.signatureUrl);
             const originalBlob = await originalResponse.blob();
-            console.log('🔍 DEBUG: Original blob from Cloudinary:', {
-                type: originalBlob.type,
-                size: originalBlob.size
-            });
-
-            console.log('🔍 DEBUG: Comparison image:', {
-                type: comparisonImage.type,
-                size: comparisonImage.size,
-                name: comparisonImage.name
-            });
 
             // Connect to Hugging Face Space using Gradio client
             const client = await Client.connect("sunny4203/signature-verification");
 
             // Call the predict function with both images
-            console.log('🔍 DEBUG: Sending to HF model...');
             const result = await client.predict("/compute_similarity", {
                 image1: originalBlob,
                 image2: comparisonImage
             });
 
             // Parse the result
-            console.log('🔍 DEBUG: HF Result:', result.data[0]);
             const verificationText = result.data[0];
             processResult(verificationText);
 
@@ -131,8 +118,6 @@ function Dashboard() {
         } else if (diff > 0.1) {
             confidence = 'Medium';
         }
-
-        console.log(`🔍 Score: ${score}, Threshold: ${userThreshold}, Match: ${isMatch}`);
 
         setVerificationResult({
             match: isMatch,

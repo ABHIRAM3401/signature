@@ -111,6 +111,7 @@ async function uploadToCloudinary(base64Image) {
 app.post('/api/auth/register', async (req, res) => {
     try {
         const { name, email, password, signature, threshold } = req.body;
+        console.log('📥 Registration received - Threshold:', threshold);
 
         if (!name || !email || !password) {
             return res.status(400).json({ message: 'Please provide all required fields' });

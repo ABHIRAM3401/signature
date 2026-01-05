@@ -91,7 +91,6 @@ function LoginPage() {
 
                 // Calculate threshold using HF model
                 setError(''); // Clear any previous errors
-                console.log('🔄 Calculating personalized threshold...');
 
                 // Connect to HF and get similarity score
                 const client = await Client.connect("sunny4203/signature-verification");
@@ -109,7 +108,6 @@ function LoginPage() {
 
                 const similarityScore = parseFloat(scoreMatch[1]);
                 const threshold = similarityScore - 0.03;
-                console.log(`✅ Similarity: ${similarityScore}, Threshold: ${threshold}`);
 
                 // Convert first signature to base64 for storage
                 const reader = new FileReader();
