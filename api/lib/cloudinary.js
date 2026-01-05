@@ -17,10 +17,7 @@ export async function uploadImage(imageData, folder = 'signatures') {
         const result = await cloudinary.uploader.upload(imageData, {
             folder: folder,
             resource_type: 'image',
-            transformation: [
-                { width: 500, height: 300, crop: 'limit' }, // Limit size for signatures
-                { quality: 'auto' }
-            ]
+            quality: 100
         });
 
         return {

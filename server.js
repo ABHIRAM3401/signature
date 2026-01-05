@@ -91,10 +91,7 @@ async function uploadToCloudinary(base64Image) {
         const result = await cloudinary.uploader.upload(base64Image, {
             folder: 'signatures',
             resource_type: 'image',
-            transformation: [
-                { width: 500, height: 300, crop: 'limit' },
-                { quality: 'auto' }
-            ]
+            quality: 100
         });
         return {
             url: result.secure_url,

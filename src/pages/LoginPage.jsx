@@ -174,6 +174,7 @@ function LoginPage() {
                                 value={formData.email}
                                 onChange={handleChange}
                                 placeholder="you@example.com"
+                                autoComplete="email"
                                 required
                             />
                         </div>
@@ -188,6 +189,7 @@ function LoginPage() {
                                     value={formData.password}
                                     onChange={handleChange}
                                     placeholder="••••••••"
+                                    autoComplete={isLogin ? 'current-password' : 'new-password'}
                                     required
                                     minLength={6}
                                 />
