@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     try {
         await connectDB();
 
-        const { name, email, password, signature } = req.body;
+        const { name, email, password, signature, threshold } = req.body;
 
         // Validation
         if (!name || !email || !password) {
@@ -21,6 +21,10 @@ export default async function handler(req, res) {
 
         if (!signature) {
             return res.status(400).json({ message: 'Please upload your signature' });
+        }
+
+        if (threshold === undefined || threshold === null) {
+            return res.status(400).json({ message: 'Threshold calculation required' });
         }
 
         if (password.length < 6) {
@@ -67,7 +71,8 @@ export default async function handler(req, res) {
             email: email.toLowerCase(),
             password: hashedPassword,
             signatureUrl,
-            signaturePublicId
+            signaturePublicId,
+            threshold
         });
 
         // Generate JWT token
@@ -80,7 +85,8 @@ export default async function handler(req, res) {
                 id: user._id,
                 name: user.name,
                 email: user.email,
-                signatureUrl: user.signatureUrl
+                signatureUrl: user.signatureUrl,
+                threshold: user.threshold
             }
         });
     } catch (error) {

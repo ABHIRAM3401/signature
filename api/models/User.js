@@ -28,6 +28,10 @@ const userSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    threshold: {
+        type: Number,
+        required: true
+    },
     createdAt: {
         type: Date,
         default: Date.now
